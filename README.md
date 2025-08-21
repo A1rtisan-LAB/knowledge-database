@@ -172,7 +172,10 @@ curl http://localhost:8000/health
 
 ### AWS Deployment
 
+> **Note**: AWS deployment workflows are currently disabled for local development. To enable AWS deployment features, see the [AWS Activation Guide](docs/AWS_ACTIVATION_GUIDE.md) (한국어: [AWS 활성화 가이드](docs/AWS_ACTIVATION_GUIDE.ko.md)).
+
 ```bash
+# After enabling AWS workflows (see activation guide)
 # Configure AWS credentials
 aws configure
 
