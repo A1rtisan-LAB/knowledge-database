@@ -37,6 +37,7 @@ orjson==3.9.10
 python-dotenv==1.0.0
 structlog==23.2.0
 tenacity==8.2.3
+itsdangerous==2.1.2
 
 # Development & Testing
 pytest==7.4.3
