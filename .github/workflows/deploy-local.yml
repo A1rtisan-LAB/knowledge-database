@@ -30,8 +30,8 @@ jobs:
     - name: Run tests
       env:
         SECRET_KEY: test-secret-key
-        DATABASE_URL: sqlite+aiosqlite:///:memory:
-        TESTING: true
+        DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+        TESTING: "true"
       run: |
         pytest tests/ --cov=app --cov-report=xml
     
