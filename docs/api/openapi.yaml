@@ -1,0 +1,1505 @@
+openapi: 3.0.3
+info:
+  title: Knowledge Database API
+  version: 1.0.0
+  description: |
+    # Knowledge Database API
+    
+    Comprehensive knowledge management system with AI-powered search and bilingual support.
+    
+    ## Features
+    - JWT-based authentication with refresh tokens
+    - Role-based access control (viewer, editor, admin)
+    - Multi-language support (English and Korean)
+    - AI-powered semantic search using OpenSearch
+    - Real-time analytics and metrics
+    - Rate limiting and request throttling
+    - Comprehensive audit logging
+    
+    ## Authentication
+    Most endpoints require authentication using JWT bearer tokens.
+    Include the token in the Authorization header: `Bearer <token>`
+    
+    ## Rate Limiting
+    - Default: 100 requests per 60 seconds per user
+    - Burst: Maximum 10 requests per second
+    
+    ## Language Support
+    Use the `language` query parameter to specify language preference:
+    - `en` for English (default)
+    - `ko` for Korean
+  contact:
+    email: api-support@knowledge.example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.knowledge.example.com/api/v1
+    description: Production server
+  - url: http://localhost:8000/api/v1
+    description: Development server
+
+tags:
+  - name: Authentication
+    description: User authentication and token management
+  - name: Knowledge Items
+    description: Create, read, update, and delete knowledge items
+  - name: Categories
+    description: Manage knowledge categories and hierarchy
+  - name: Search
+    description: AI-powered search with semantic and keyword matching
+  - name: Analytics
+    description: Usage analytics and insights
+  - name: Admin
+    description: Administrative functions for system management
+
+paths:
+  /:
+    get:
+      summary: Get API information
+      tags: [Root]
+      responses:
+        '200':
+          description: API information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    example: Knowledge Database API
+                  version:
+                    type: string
+                    example: 1.0.0
+                  status:
+                    type: string
+                    example: healthy
+                  docs:
+                    type: string
+                    example: /docs
+
+  /health:
+    get:
+      summary: Health check endpoint
+      tags: [Root]
+      responses:
+        '200':
+          description: Service health status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  version:
+                    type: string
+                    example: 1.0.0
+                  environment:
+                    type: string
+                    example: production
+
+  /auth/login:
+    post:
+      summary: User login
+      tags: [Authentication]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /auth/refresh:
+    post:
+      summary: Refresh access token
+      tags: [Authentication]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /auth/logout:
+    post:
+      summary: User logout
+      tags: [Authentication]
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Logout successful
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /auth/me:
+    get:
+      summary: Get current user information
+      tags: [Authentication]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current user information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /knowledge:
+    get:
+      summary: List knowledge items
+      tags: [Knowledge Items]
+      security:
+        - bearerAuth: []
+        - {}
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/LanguageParam'
+        - name: category_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: Filter by category ID
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [article, faq, guide, tutorial, reference]
+          description: Filter by content type
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, published, archived, deleted]
+          description: Filter by status (editors only)
+        - name: tags
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          description: Filter by tags (must have all)
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [created_at, updated_at, title, views, helpful]
+            default: updated_at
+          description: Sort field
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+          description: Sort order
+      responses:
+        '200':
+          description: List of knowledge items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeItemListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    post:
+      summary: Create knowledge item
+      tags: [Knowledge Items]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KnowledgeItemCreate'
+      responses:
+        '201':
+          description: Knowledge item created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeItemResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          description: Conflict - slug already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /knowledge/{id}:
+    get:
+      summary: Get knowledge item by ID
+      tags: [Knowledge Items]
+      security:
+        - bearerAuth: []
+        - {}
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - $ref: '#/components/parameters/LanguageParam'
+        - name: include_related
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Include related items
+      responses:
+        '200':
+          description: Knowledge item details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeItemDetailResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    put:
+      summary: Update knowledge item
+      tags: [Knowledge Items]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KnowledgeItemUpdate'
+      responses:
+        '200':
+          description: Knowledge item updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeItemResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    delete:
+      summary: Delete knowledge item
+      tags: [Knowledge Items]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '204':
+          description: Knowledge item deleted
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /knowledge/{id}/publish:
+    post:
+      summary: Publish knowledge item
+      tags: [Knowledge Items]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Knowledge item published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeItemResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /knowledge/{id}/versions:
+    get:
+      summary: Get knowledge item version history
+      tags: [Knowledge Items]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Version history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/KnowledgeVersionResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /categories:
+    get:
+      summary: List categories
+      tags: [Categories]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/LanguageParam'
+        - name: parent_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: Filter by parent category
+      responses:
+        '200':
+          description: List of categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CategoryResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    post:
+      summary: Create category
+      tags: [Categories]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryCreate'
+      responses:
+        '201':
+          description: Category created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          description: Conflict - slug already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /categories/{id}:
+    get:
+      summary: Get category details
+      tags: [Categories]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - $ref: '#/components/parameters/LanguageParam'
+      responses:
+        '200':
+          description: Category details with children
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryDetailResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /search:
+    post:
+      summary: Search knowledge base
+      tags: [Search]
+      security:
+        - bearerAuth: []
+        - {}
+      parameters:
+        - $ref: '#/components/parameters/LanguageParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - name: search_type
+          in: query
+          schema:
+            type: string
+            enum: [keyword, semantic, hybrid]
+            default: hybrid
+          description: Search type
+        - name: category_ids
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          description: Filter by category IDs
+        - name: types
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          description: Filter by content types
+        - name: tags
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          description: Filter by tags
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                  description: Search query
+                  example: how to configure authentication
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /search/suggest:
+    get:
+      summary: Get search suggestions
+      tags: [Search]
+      security:
+        - bearerAuth: []
+        - {}
+      parameters:
+        - $ref: '#/components/parameters/LanguageParam'
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+          description: Partial search query
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 5
+          description: Maximum suggestions
+      responses:
+        '200':
+          description: Search suggestions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuggestResponse'
+
+  /search/similar:
+    post:
+      summary: Find similar content
+      tags: [Search]
+      parameters:
+        - $ref: '#/components/parameters/LanguageParam'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+          description: Maximum results
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - text
+              properties:
+                text:
+                  type: string
+                  description: Text to find similar content for
+                  example: I need help with user authentication and JWT tokens
+      responses:
+        '200':
+          description: Similar items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimilarResponse'
+
+  /analytics/overview:
+    get:
+      summary: Get analytics overview
+      tags: [Analytics]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Start date (default 30 days ago)
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: End date (default now)
+      responses:
+        '200':
+          description: Analytics overview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsOverview'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /analytics/popular:
+    get:
+      summary: Get popular content
+      tags: [Analytics]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [day, week, month, year]
+            default: week
+          description: Time period
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+          description: Maximum results
+      responses:
+        '200':
+          description: Popular content
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PopularItem'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /analytics/search-queries:
+    get:
+      summary: Get search query analytics
+      tags: [Analytics]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [day, week, month]
+            default: week
+          description: Time period
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Maximum results
+      responses:
+        '200':
+          description: Search query analytics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SearchQueryAnalytics'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /admin/users:
+    get:
+      summary: List users
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+    post:
+      summary: Create user
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          description: Conflict - email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /admin/bulk-import:
+    post:
+      summary: Bulk import knowledge items
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - format
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Import file
+                format:
+                  type: string
+                  enum: [csv, json, markdown]
+                  description: File format
+      responses:
+        '202':
+          description: Import job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '400':
+          description: Invalid file format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/reindex:
+    post:
+      summary: Trigger search index rebuild
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: force
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Force complete reindex
+      responses:
+        '202':
+          description: Reindex job started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: started
+                  message:
+                    type: string
+                    example: Reindexing job has been queued
+                  force:
+                    type: boolean
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT authentication token
+
+  parameters:
+    IdParam:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Resource ID
+
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      description: Page number
+
+    LimitParam:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      description: Items per page
+
+    LanguageParam:
+      name: language
+      in: query
+      schema:
+        type: string
+        enum: [en, ko]
+        default: en
+      description: Language preference
+
+  schemas:
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          format: password
+          minLength: 8
+          example: SecurePassword123
+        organization_slug:
+          type: string
+          example: my-org
+
+    RefreshRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIs...
+
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIs...
+        refresh_token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIs...
+        token_type:
+          type: string
+          example: Bearer
+
+    LoginResponse:
+      allOf:
+        - $ref: '#/components/schemas/TokenResponse'
+        - type: object
+          properties:
+            user:
+              $ref: '#/components/schemas/UserResponse'
+
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        username:
+          type: string
+        full_name:
+          type: string
+        role:
+          type: string
+          enum: [viewer, editor, admin]
+        organization_id:
+          type: string
+          format: uuid
+        is_active:
+          type: boolean
+        is_verified:
+          type: boolean
+        last_login_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    UserCreate:
+      type: object
+      required:
+        - email
+        - username
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        username:
+          type: string
+        password:
+          type: string
+          minLength: 8
+        full_name:
+          type: string
+        role:
+          type: string
+          enum: [viewer, editor, admin]
+          default: viewer
+
+    KnowledgeItemCreate:
+      type: object
+      required:
+        - type
+        - slug
+        - title_ko
+        - title_en
+        - content_ko
+        - content_en
+      properties:
+        type:
+          type: string
+          enum: [article, faq, guide, tutorial, reference]
+        slug:
+          type: string
+          pattern: '^[a-z0-9-]+$'
+        category_id:
+          type: string
+          format: uuid
+        title_ko:
+          type: string
+          maxLength: 500
+        title_en:
+          type: string
+          maxLength: 500
+        content_ko:
+          type: string
+        content_en:
+          type: string
+        summary_ko:
+          type: string
+        summary_en:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+        seo_title_ko:
+          type: string
+          maxLength: 255
+        seo_title_en:
+          type: string
+          maxLength: 255
+        seo_description_ko:
+          type: string
+        seo_description_en:
+          type: string
+        seo_keywords:
+          type: array
+          items:
+            type: string
+
+    KnowledgeItemUpdate:
+      type: object
+      properties:
+        category_id:
+          type: string
+          format: uuid
+        title_ko:
+          type: string
+          maxLength: 500
+        title_en:
+          type: string
+          maxLength: 500
+        content_ko:
+          type: string
+        content_en:
+          type: string
+        summary_ko:
+          type: string
+        summary_en:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+        seo_title_ko:
+          type: string
+          maxLength: 255
+        seo_title_en:
+          type: string
+          maxLength: 255
+        seo_description_ko:
+          type: string
+        seo_description_en:
+          type: string
+        seo_keywords:
+          type: array
+          items:
+            type: string
+
+    KnowledgeItemResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+        slug:
+          type: string
+        category:
+          $ref: '#/components/schemas/CategoryInfo'
+        title_ko:
+          type: string
+        title_en:
+          type: string
+        summary_ko:
+          type: string
+        summary_en:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [draft, published, archived, deleted]
+        version:
+          type: integer
+        view_count:
+          type: integer
+        helpful_count:
+          type: integer
+        not_helpful_count:
+          type: integer
+        published_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    KnowledgeItemDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/KnowledgeItemResponse'
+        - type: object
+          properties:
+            content_ko:
+              type: string
+            content_en:
+              type: string
+            metadata:
+              type: object
+            seo_title_ko:
+              type: string
+            seo_title_en:
+              type: string
+            seo_description_ko:
+              type: string
+            seo_description_en:
+              type: string
+            seo_keywords:
+              type: array
+              items:
+                type: string
+            related_items:
+              type: array
+              items:
+                $ref: '#/components/schemas/KnowledgeItemResponse'
+
+    KnowledgeItemListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/KnowledgeItemResponse'
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+        has_more:
+          type: boolean
+
+    KnowledgeVersionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        version_number:
+          type: integer
+        title_ko:
+          type: string
+        title_en:
+          type: string
+        change_summary:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    CategoryInfo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name_ko:
+          type: string
+        name_en:
+          type: string
+        slug:
+          type: string
+
+    CategoryCreate:
+      type: object
+      required:
+        - name_ko
+        - name_en
+        - slug
+      properties:
+        parent_id:
+          type: string
+          format: uuid
+        name_ko:
+          type: string
+        name_en:
+          type: string
+        slug:
+          type: string
+          pattern: '^[a-z0-9-]+$'
+        description_ko:
+          type: string
+        description_en:
+          type: string
+        icon:
+          type: string
+        display_order:
+          type: integer
+
+    CategoryResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        parent_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        display_order:
+          type: integer
+        item_count:
+          type: integer
+
+    CategoryDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/CategoryResponse'
+        - type: object
+          properties:
+            children:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  slug:
+                    type: string
+                  item_count:
+                    type: integer
+
+    SearchResponse:
+      type: object
+      properties:
+        query:
+          type: string
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              title:
+                type: string
+              slug:
+                type: string
+              summary:
+                type: string
+              score:
+                type: number
+                format: float
+              highlights:
+                type: array
+                items:
+                  type: string
+              category:
+                $ref: '#/components/schemas/CategoryInfo'
+              tags:
+                type: array
+                items:
+                  type: string
+        facets:
+          type: object
+          properties:
+            categories:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  count:
+                    type: integer
+            tags:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  count:
+                    type: integer
+
+    SuggestResponse:
+      type: object
+      properties:
+        query:
+          type: string
+        suggestions:
+          type: array
+          items:
+            type: string
+
+    SimilarResponse:
+      type: object
+      properties:
+        text:
+          type: string
+        language:
+          type: string
+        similar_items:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              similarity:
+                type: number
+                format: float
+
+    AnalyticsOverview:
+      type: object
+      properties:
+        total_items:
+          type: integer
+        published_items:
+          type: integer
+        total_views:
+          type: integer
+        total_searches:
+          type: integer
+        period:
+          type: object
+          properties:
+            start_date:
+              type: string
+              format: date-time
+            end_date:
+              type: string
+              format: date-time
+
+    PopularItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title_ko:
+          type: string
+        title_en:
+          type: string
+        type:
+          type: string
+        view_count:
+          type: integer
+        helpful_count:
+          type: integer
+        helpful_percentage:
+          type: number
+          format: float
+
+    SearchQueryAnalytics:
+      type: object
+      properties:
+        query:
+          type: string
+        count:
+          type: integer
+        avg_results:
+          type: number
+          format: float
+
+    JobResponse:
+      type: object
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        message:
+          type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+
+  responses:
+    UnauthorizedError:
+      description: Authentication information is missing or invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: unauthorized
+            message: Invalid or expired token
+
+    ForbiddenError:
+      description: User does not have permission to access this resource
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: forbidden
+            message: You don't have permission to access this resource
+
+    NotFoundError:
+      description: The requested resource was not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: not_found
+            message: Resource not found
+
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+              details:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    loc:
+                      type: array
+                      items:
+                        type: string
+                    msg:
+                      type: string
+                    type:
+                      type: string
+          example:
+            error: validation_error
+            message: Validation failed
+            details:
+              - loc: ["body", "email"]
+                msg: invalid email address
+                type: value_error.email
+
+    RateLimitError:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+              retry_after:
+                type: integer
+          example:
+            error: rate_limit_exceeded
+            message: Rate limit exceeded. Please try again later.
+            retry_after: 45
+
+externalDocs:
+  description: Full API Documentation
+  url: https://developers.knowledge.example.com/api

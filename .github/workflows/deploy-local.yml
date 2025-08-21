@@ -1,0 +1,80 @@
+name: Deploy to Local Environment
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-test.txt
+    
+    - name: Run tests
+      env:
+        SECRET_KEY: test-secret-key
+        DATABASE_URL: sqlite+aiosqlite:///:memory:
+        TESTING: true
+      run: |
+        pytest tests/ --cov=app --cov-report=xml
+    
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: false
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    
+    - name: Build Docker image
+      run: |
+        docker build -f Dockerfile.prod -t knowledge-database:${{ github.sha }} .
+    
+    - name: Save Docker image
+      run: |
+        docker save knowledge-database:${{ github.sha }} | gzip > knowledge-database.tar.gz
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: docker-image
+        path: knowledge-database.tar.gz
+        retention-days: 7
+
+  deploy-notification:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Send deployment notification
+      run: |
+        echo "🚀 Deployment ready for local environment"
+        echo "Image: knowledge-database:${{ github.sha }}"
+        echo "To deploy locally, run: ./scripts/deploy-local.sh"

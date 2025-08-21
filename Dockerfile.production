@@ -1,0 +1,120 @@
+# Production-optimized Multi-stage Dockerfile for Knowledge Database API
+# Build date: 2025-08-21
+# Version: 1.0.0
+
+# ===================================
+# Stage 1: Builder Stage
+# ===================================
+FROM python:3.11-slim as builder
+
+# Set build environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=100 \
+    POETRY_VERSION=1.7.1
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    libpq-dev \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install Python dependencies
+WORKDIR /build
+COPY requirements-prod.txt .
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements-prod.txt && \
+    pip install --no-cache-dir gunicorn==21.2.0
+
+# ===================================
+# Stage 2: Runtime Stage (Distroless)
+# ===================================
+FROM python:3.11-slim as runtime
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    curl \
+    ca-certificates \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /tmp/* \
+    && rm -rf /var/tmp/*
+
+# Create non-root user with specific UID/GID
+RUN groupadd -r -g 1001 appgroup && \
+    useradd -r -u 1001 -g appgroup -d /app -s /bin/false appuser && \
+    mkdir -p /app && \
+    chown -R appuser:appgroup /app
+
+# Copy virtual environment from builder
+COPY --from=builder --chown=appuser:appgroup /opt/venv /opt/venv
+
+# Set environment variables for production
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONHASHSEED=random \
+    PYTHONPATH=/app \
+    APP_ENV=production \
+    LOG_LEVEL=INFO
+
+# Set working directory
+WORKDIR /app
+
+# Copy application code
+COPY --chown=appuser:appgroup app /app/app
+COPY --chown=appuser:appgroup scripts/startup.sh /app/scripts/startup.sh
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/tmp && \
+    chown -R appuser:appgroup /app/logs /app/tmp && \
+    chmod 755 /app/scripts/startup.sh
+
+# Security hardening
+RUN chmod -R 550 /app/app && \
+    chmod -R 770 /app/logs /app/tmp
+
+# Switch to non-root user
+USER appuser
+
+# Expose application port
+EXPOSE 8000
+
+# Health check configuration
+HEALTHCHECK --interval=30s \
+            --timeout=10s \
+            --start-period=40s \
+            --retries=3 \
+            CMD curl -f http://localhost:8000/health || exit 1
+
+# Set security labels
+LABEL maintainer="A1rtisan Domain Store" \
+      version="1.0.0" \
+      description="Knowledge Database API Production Image" \
+      security.scan="enabled" \
+      security.updates="auto"
+
+# Production startup command with Gunicorn
+CMD ["gunicorn", "app.main:app", \
+     "--bind", "0.0.0.0:8000", \
+     "--workers", "4", \
+     "--worker-class", "uvicorn.workers.UvicornWorker", \
+     "--worker-connections", "1000", \
+     "--max-requests", "10000", \
+     "--max-requests-jitter", "1000", \
+     "--timeout", "60", \
+     "--keepalive", "5", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "--log-level", "info", \
+     "--capture-output", \
+     "--enable-stdio-inheritance"]

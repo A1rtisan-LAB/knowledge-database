@@ -1,0 +1,36 @@
+# Minimal requirements for running the application
+# Use this for quick local setup without optional features
+
+# Core
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+python-multipart==0.0.6
+
+# Database
+sqlalchemy==2.0.23
+alembic==1.12.1
+asyncpg==0.29.0
+pgvector==0.2.3
+
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-decouple==3.8
+
+# Security
+bleach==6.1.0
+itsdangerous==2.2.0
+
+# Search (minimal)
+opensearch-py==2.4.2
+
+# Cache
+redis==5.0.1
+
+# Utilities
+httpx>=0.13.3
+orjson==3.9.10
+python-dotenv==1.0.0
+structlog==23.2.0

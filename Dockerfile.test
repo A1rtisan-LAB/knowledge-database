@@ -1,0 +1,89 @@
+# Test-specific Dockerfile for isolated testing environment
+FROM python:3.11-slim as base
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    curl \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy requirements
+COPY requirements.txt requirements-test.txt ./
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r requirements-test.txt
+
+# Test target
+FROM base as test
+
+# Copy application code and tests
+COPY ./app /app/app
+COPY ./tests /app/tests
+COPY ./pytest.ini /app/pytest.ini
+
+# Create necessary directories
+RUN mkdir -p /app/coverage /app/htmlcov /app/logs
+
+# Set Python path
+ENV PYTHONPATH=/app
+
+# Health check script
+COPY --chmod=755 <<EOF /app/healthcheck.sh
+#!/bin/bash
+python -c "
+import sys
+import asyncio
+import asyncpg
+from opensearchpy import OpenSearch
+import redis
+
+async def check_postgres():
+    try:
+        conn = await asyncpg.connect('$DATABASE_URL')
+        await conn.fetchval('SELECT 1')
+        await conn.close()
+        return True
+    except:
+        return False
+
+def check_opensearch():
+    try:
+        client = OpenSearch(
+            hosts=[{'host': '$OPENSEARCH_HOST', 'port': 9200}],
+            use_ssl=False,
+            verify_certs=False
+        )
+        return client.ping()
+    except:
+        return False
+
+def check_redis():
+    try:
+        r = redis.Redis(host='$REDIS_HOST', port=6379, db=0)
+        return r.ping()
+    except:
+        return False
+
+async def main():
+    postgres_ok = await check_postgres()
+    opensearch_ok = check_opensearch()
+    redis_ok = check_redis()
+    
+    if postgres_ok and opensearch_ok and redis_ok:
+        print('All services are healthy')
+        sys.exit(0)
+    else:
+        print(f'Services status - Postgres: {postgres_ok}, OpenSearch: {opensearch_ok}, Redis: {redis_ok}')
+        sys.exit(1)
+
+asyncio.run(main())
+"
+EOF
+
+# Default command
+CMD ["pytest", "tests/", "-v", "--tb=short", "--color=yes"]
